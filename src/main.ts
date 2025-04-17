@@ -1,5 +1,6 @@
 
 import * as PIXI from "pixi.js";
+import { Application } from 'pixi.js';
 import { gsap } from 'gsap';
 import * as BE from './be.ts';
 import { ColorMatrixFilter } from '@pixi/filter-color-matrix';
@@ -13,7 +14,7 @@ type Sprites = PIXI.Sprite[]
   // Create and initialize a new application
   const app = new PIXI.Application();
   await app.init({ background: "#1099bb", resizeTo: window });
-  document.getElementById("pixi-container")!.appendChild(app.canvas);
+  document.getElementById("game-container")!.appendChild(app.canvas);
 
   // define gloable variables
   const VISIBLE_TOP = app.screen.height * 2 / 7;
@@ -22,6 +23,7 @@ type Sprites = PIXI.Sprite[]
   const CENTER_X = app.screen.width / 2;
   const CENTER_Y = app.screen.height / 2;
   const SCALE = 0.4;
+  const SPACE = 80;
 
   const MASK_COLOR = 0x000000;
   const MASK_ALPHA = 0.5;
@@ -45,16 +47,30 @@ type Sprites = PIXI.Sprite[]
   const VELOCITY_INCREASE_RATE = 0.9;
   const VELOCITY_DECREASE_RATE = 0.5;
 
-  const AVTIONBUTTON_X = 0;
+  const ACTIONBUTTON_X = 0;
   const ACTIONBUTTON_Y = 0;
   const ACTIONBUTTON_SCALE = 2;
 
-  const STOP_SPRITES_INDEX_1 = 2;
+  const ADD_REEL_ROW_BUTTON_X = app.screen.width - 100;
+  const ADD_REEL_ROW_BUTTON_Y = app.screen.height - 100;
+  const ADD_REEL_ROW_BUTTON_SCALE = 1;
 
-  const SPACE = 80;
+  const REDUCE_REEL_ROW_BUTTON_X = 0;
+  const REDUCE_REEL_ROW_BUTTON_Y = app.screen.height - 100;
+  const REDUCE_REEL_ROW_BUTTON_SCALE = 1;
+
+
   const REEL_SIZE = BE.GetReelSet()[0].length;
   const REEL_SET_X = CENTER_X - BE.GetReelNum() * REEL_GAP / 2;
   const REEL_SET_Y = CENTER_Y - REEL_SIZE * SPACE / 2;
+
+  let REEL_NUM_INITIAL = BE.GetReelSet().length - 1;
+  let ROW_NUM_INITIAL = REEL_SIZE - 1;
+
+  let REEL_NUM_ADDED = addReelAndRow().reelNum;
+  let ROW_NUM_ADDED = addReelAndRow().rowNum;
+  let REEL_NUM_REDUCED = reduceReelAndRow().reelNum;
+  let ROW_NUM_REDUCED = reduceReelAndRow().rowNum;
 
   // const GLOW_FILTER = new GlowFilter({
   //   distance: 15, // 发光的扩散距离
@@ -113,12 +129,35 @@ type Sprites = PIXI.Sprite[]
   }
 
   // create a mask
-  function createMask(maskX: number, maskY: number, maskWidth: number, maskHeight: number, maskColor: number, maskAlpha: number): { mask: PIXI.Graphics } {
+  function createMask(maskX: number, maskY: number, maskWidth: number, maskHeight: number, maskColor: number, maskAlpha: number):  PIXI.Graphics  {
     const mask = new PIXI.Graphics();
     mask.rect(maskX, maskY, maskWidth, maskHeight);
     mask.fill({ color: maskColor, alpha: maskAlpha });
     app.stage.addChild(mask);
-    return { mask };
+    return  mask;
+  }
+
+  // create sprites array
+  function createReelsSprites(reelNum: number, reelSize: number, spriteMap: { [key: number]: PIXI.Texture }): Sprites[] {
+    const spritesArray: Sprites[] = [];
+
+    // loop of every reel
+    for (let i = 0; i < reelNum; i++) {
+      const sprites: Sprites = [];
+
+      // loop of every sprites in one reel
+      for (let j = 0; j < reelSize; j++) {
+        let spriteIndex = BE.GetReelSet()[i][j]; // 获取当前 reel 中的 sprite 索引
+        let texture = spriteMap[spriteIndex];  // 获取对应的纹理
+        let sprite = new PIXI.Sprite(texture); // 创建新的 sprite
+        sprite.label = '' + j;  // 给每个 sprite 设置一个 label（可以作为调试信息）
+        sprites.push(sprite);
+      }
+
+      spritesArray.push(sprites);
+    }
+
+    return spritesArray;
   }
 
   // create a container filled with Sprites
@@ -185,7 +224,35 @@ type Sprites = PIXI.Sprite[]
     return reelSet
   }
 
+  // create and show reels
+  async function createAndShowReels(reelNum: number, reelSize: number): Promise<Application> {
+    const app = new Application();
+    await app.init({
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: 0x1099bb, // 背景色
+    });
 
+    // 添加到页面中（确保你有一个容器，比如 div#game-container）
+    document.getElementById("game-container")?.appendChild(app.canvas);
+
+    const spritesArray = createReelsSprites(reelNum, reelSize, SPRITE_MAP);
+    const reels = createReels(spritesArray, SCALE, SPACE);
+    const reelSet = createReelSet(reels, REEL_SET_X, REEL_SET_Y, REEL_GAP);
+    app.stage.addChild(reelSet);
+
+    const topMask=createMask(MASK_TOP_X, MASK_TOP_Y, MASK_TOP_WIDTH, MASK_TOP_HEIGHT, MASK_COLOR, MASK_ALPHA);
+    const bottomMask =createMask(MASK_BOTTOM_X, MASK_BOTTOM_Y, MASK_BOTTOM_WIDTH, MASK_BOTTOM_HEIGHT, MASK_COLOR, MASK_ALPHA);
+    app.stage.addChild(topMask, bottomMask);
+
+    const actionButton = createAndRenderButton(setButtonActionMode(actionButtonSprite), ACTIONBUTTON_X, ACTIONBUTTON_Y, ACTIONBUTTON_SCALE);
+    const stopButton = createAndRenderButton(setButtonActionMode(stopButtonSprite), ACTIONBUTTON_X + 100, ACTIONBUTTON_Y, ACTIONBUTTON_SCALE);
+    const addReelAndRowButton = createAndRenderButton(setButtonActionMode(addReelAndRowSprite), ADD_REEL_ROW_BUTTON_X, ADD_REEL_ROW_BUTTON_Y, ADD_REEL_ROW_BUTTON_SCALE);
+    const reduceReelAndRowButton = createAndRenderButton(setButtonActionMode(reduceReelAndRowSprite), REDUCE_REEL_ROW_BUTTON_X, REDUCE_REEL_ROW_BUTTON_Y, REDUCE_REEL_ROW_BUTTON_SCALE);
+
+    app.stage.addChild(actionButton, stopButton, addReelAndRowButton, reduceReelAndRowButton)
+    return app;
+  }
 
   // Scroll the reel as assigned direction
   function move(reel: PIXI.Container, direction: number, deltaTime: number, velocity: number): void {
@@ -297,12 +364,12 @@ type Sprites = PIXI.Sprite[]
     )
   }
 
-  // 判断所有的 reel 是否都停止
+  // tell if all reels are stopped
   function allReelsCanShowWin(): boolean {
     return reelStates.every(reelState => reelState.canShowWin);
   }
 
-  // run
+  // run: moveAndWrap, acceleration, deceleration, stopReelWithBounce, highlightWinningSymbols
   function run(reelState: ReelState, deltaTime: number) {
     if (reelState.canMove) {
       moveAndWrap(reelState.reel, SPACE, deltaTime, reelState.direction, reelState.velocity);
@@ -322,21 +389,51 @@ type Sprites = PIXI.Sprite[]
 
     if (allReelsCanShowWin()) {
       console.log("sfaegagavs");
-      
+
       highlightWinningSymbols(wins);
       reelState.canShowWin = false;
     }
 
   }
 
-
-  // create and set the action mode of the button
-  function setButtonActionMode(buttonTexture: PIXI.Sprite): PIXI.Sprite {
-    buttonTexture.eventMode = 'static';
-    buttonTexture.cursor = 'pointer';
-    return buttonTexture
+  // add Reel and row
+  function addReelAndRow(): { reelNum: number, rowNum: number } {
+    REEL_NUM_INITIAL += 1;
+    ROW_NUM_INITIAL += 1;
+    return { reelNum: REEL_NUM_INITIAL, rowNum: ROW_NUM_INITIAL };
   }
 
+  // reduce Reel and row
+  function reduceReelAndRow(): { reelNum: number, rowNum: number } {
+    REEL_NUM_INITIAL -= 3;
+    ROW_NUM_INITIAL -= 1;
+
+    return { reelNum: REEL_NUM_INITIAL, rowNum: ROW_NUM_INITIAL };
+  }
+
+  // create reel states 
+  function createReelStates(reels: PIXI.Container[]): ReelState[] {
+    const reelStates: ReelState[] = [];
+
+    for (let i = 0; i < reels.length; i++) {
+      const direction = i % 2 === 0 ? SCROLL_DIRECTION_DOWN : SCROLL_DIRECTION_UP;
+      const reelState = new ReelState(direction, reels[i]);
+      reelStates.push(reelState);
+    }
+
+    return reelStates;
+  }
+
+  // create reelstates when starting 
+  function resetReelStates(reelStates: ReelState[]) {
+    reelStates.forEach(reel => {
+      reel.canMove = true;
+      reel.canStop = false;
+      reel.canDeceleration = false;
+      reel.velocity = 0;
+      reel.canShowWin = false;
+    });
+  }
 
   // create and render the action button
   function createAndRenderButton(buttonSprite: PIXI.Sprite, buttonX: number, buttonY: number, scale_index: number): PIXI.Container {
@@ -345,6 +442,13 @@ type Sprites = PIXI.Sprite[]
     buttonSprite.scale.set(scale_index);
     app.stage.addChild(buttonSprite);
     return buttonSprite;
+  }
+
+  // create and set the action mode of the button
+  function setButtonActionMode(buttonTexture: PIXI.Sprite): PIXI.Sprite {
+    buttonTexture.eventMode = 'static';
+    buttonTexture.cursor = 'pointer';
+    return buttonTexture
   }
 
   // create amount text
@@ -384,8 +488,12 @@ type Sprites = PIXI.Sprite[]
   });
   const textures = await PIXI.Assets.loadBundle("assets");
 
+  // create sprites of buttons
   const actionButtonSprite = new PIXI.Sprite(textures.bunny);
   const stopButtonSprite = new PIXI.Sprite(textures.bunny);
+  const addReelAndRowSprite = new PIXI.Sprite(textures.heart);
+  const reduceReelAndRowSprite = new PIXI.Sprite(textures.club);
+
   const light1Sprite = new PIXI.Sprite(textures.light1)
 
   // create sprite map
@@ -398,36 +506,37 @@ type Sprites = PIXI.Sprite[]
     5: PIXI.Assets.get("symbol6")
   }
 
-  // const temp = new PIXI.Sprite(SPRITE_MAP[3])
-  // app.stage.addChild(temp)
-  // temp.y = 100
-  // temp.filters = [GLOW_FILTER as any]
+  // // temp usage of init sprites
+  // const spritesArray: Sprites[] = []
 
-  // temp usage of init sprites
-  const spritesArray: Sprites[] = []
+  // // loop of every reel
+  // for (let i = 0; i < BE.GetReelNum(); i++) {
+  //   const sprites: Sprites = []
+  //   //loop of every sprites in one reel
+  //   for (let j = 0; j < REEL_SIZE; j++) {
+  //     let spriteIndex = BE.GetReelSet()[i][j];
+  //     let index = j;
+  //     let texture = SPRITE_MAP[spriteIndex];
+  //     let sprite = new PIXI.Sprite(texture);
+  //     sprite.label = '' + index;
+  //     sprites.push(sprite);
+  //   }
+  //   spritesArray.push(sprites)
+  // }
 
-  // loop of every reel
-  for (let i = 0; i < BE.GetReelNum(); i++) {
-    const sprites: Sprites = []
-    //loop of every sprites in one reel
-    for (let j = 0; j < REEL_SIZE; j++) {
-      let spriteIndex = BE.GetReelSet()[i][j];
-      let index = j;
-      let texture = SPRITE_MAP[spriteIndex];
-      let sprite = new PIXI.Sprite(texture);
-      sprite.label = '' + index;
-      sprites.push(sprite);
-      // console.log(sprite.label);
-    }
-    spritesArray.push(sprites)
-  }
-  console.log(spritesArray);
-
-
-
+  // create sprites array
+  const spritesArray = createReelsSprites(BE.GetReelNum(), REEL_SIZE, SPRITE_MAP);
+  const spritesArrayAdded = createReelsSprites(REEL_NUM_ADDED, ROW_NUM_ADDED, SPRITE_MAP);
+  const spritesArrayReduced = createReelsSprites(REEL_NUM_REDUCED, ROW_NUM_REDUCED, SPRITE_MAP);
 
   const reels = createReels(spritesArray, SCALE, SPACE);
+  const reelsAdded = createReels(spritesArrayAdded, SCALE, SPACE);
+  const reelsReduced = createReels(spritesArrayReduced, SCALE, SPACE);
+
   const reelSet = createReelSet(reels, REEL_SET_X, REEL_SET_Y, REEL_GAP);
+  // const reelSetAdded = createReelSet(reelsAdded, REEL_SET_X, REEL_SET_Y, REEL_GAP);
+  // const reelSetReduced = createReelSet(reelsReduced, REEL_SET_X, REEL_SET_Y, REEL_GAP);
+
   app.stage.addChild(reelSet);
   // app.stage.addChild(createReelSet(createReels(spritesArray, SCALE, SPACE), REEL_SET_X, REEL_SET_Y, REEL_GAP))
 
@@ -436,34 +545,69 @@ type Sprites = PIXI.Sprite[]
   createMask(MASK_BOTTOM_X, MASK_BOTTOM_Y, MASK_BOTTOM_WIDTH, MASK_BOTTOM_HEIGHT, MASK_COLOR, MASK_ALPHA)
 
   // create and render button
-  const actionButton = createAndRenderButton(setButtonActionMode(actionButtonSprite), AVTIONBUTTON_X, ACTIONBUTTON_Y, ACTIONBUTTON_SCALE);
-  const stopButton = createAndRenderButton(setButtonActionMode(stopButtonSprite), AVTIONBUTTON_X + 100, ACTIONBUTTON_Y, ACTIONBUTTON_SCALE);
+  const actionButton = createAndRenderButton(setButtonActionMode(actionButtonSprite), ACTIONBUTTON_X, ACTIONBUTTON_Y, ACTIONBUTTON_SCALE);
+  const stopButton = createAndRenderButton(setButtonActionMode(stopButtonSprite), ACTIONBUTTON_X + 100, ACTIONBUTTON_Y, ACTIONBUTTON_SCALE);
+  const addReelAndRowButton = createAndRenderButton(setButtonActionMode(addReelAndRowSprite), ADD_REEL_ROW_BUTTON_X, ADD_REEL_ROW_BUTTON_Y, ADD_REEL_ROW_BUTTON_SCALE);
+  const reduceReelAndRowButton = createAndRenderButton(setButtonActionMode(reduceReelAndRowSprite), REDUCE_REEL_ROW_BUTTON_X, REDUCE_REEL_ROW_BUTTON_Y, REDUCE_REEL_ROW_BUTTON_SCALE);
 
+  // add states of all reels 
+  // const reelStates: ReelState[] = [
+  //   new ReelState(SCROLL_DIRECTION_DOWN, reels[0]),
+  //   new ReelState(SCROLL_DIRECTION_UP, reels[1]),
+  //   new ReelState(SCROLL_DIRECTION_DOWN, reels[2]),
+  //   new ReelState(SCROLL_DIRECTION_UP, reels[3]),
+  //   new ReelState(SCROLL_DIRECTION_DOWN, reels[4]),
+  //   new ReelState(SCROLL_DIRECTION_UP, reels[5])
+  // ] 
 
-  // todo: add states of all reels here
-  const reelStates: ReelState[] = [
-    new ReelState(SCROLL_DIRECTION_DOWN, reels[0]),
-    new ReelState(SCROLL_DIRECTION_UP, reels[1]),
-    new ReelState(SCROLL_DIRECTION_DOWN, reels[2]),
-    new ReelState(SCROLL_DIRECTION_UP, reels[3]),
-    new ReelState(SCROLL_DIRECTION_DOWN, reels[4]),
-    new ReelState(SCROLL_DIRECTION_UP, reels[5])
-  ]
+  const reelStates = createReelStates(reels);
+  const reelStatesAdded = createReelStates(reelsAdded);
+  const reelStatesReduced = createReelStates(reelsReduced);
+
   let wins: BE.Win[] = []  // win的类的数组(id,坐标和amount)
 
+
+  let canAddReelAndRow = false;
+  let canReduceReelAndRow = false;
+  // set addReelAndRow button event
+  addReelAndRowButton.on('pointerdown', async () => {
+    console.log("Button clicked");
+    // 清除旧画面
+    const container = document.getElementById("game-container");
+    if (container) container.innerHTML = "";
+
+    await createAndShowReels(REEL_NUM_ADDED, ROW_NUM_ADDED);
+    canAddReelAndRow = true;
+  });
+
+  // set addReelAndRow button event
+  reduceReelAndRowButton.on('pointerdown', () => {
+    createAndShowReels(REEL_NUM_REDUCED, ROW_NUM_REDUCED);
+    canReduceReelAndRow = true;
+  });
+
+  // set action button event
   actionButton.on('pointerdown', () => {
     clearHighlights();
 
-    reelStates.forEach((reel) => {
-      reel.canMove = true;
-      reel.canStop = false;
-      reel.canDeceleration = false;
-      reel.velocity = 0;
-      reel.canShowWin = false;
-    });
+    // reelStates.forEach((reel) => {
+    //   reel.canMove = true;
+    //   reel.canStop = false;
+    //   reel.canDeceleration = false;
+    //   reel.velocity = 0;
+    //   reel.canShowWin = false;
+    // });
+    if (canAddReelAndRow) {
+      resetReelStates(reelStatesAdded)
+    } else if (canReduceReelAndRow) {
+      resetReelStates(reelStatesReduced)
+    } else {
+      resetReelStates(reelStates);
+    }
 
   });
 
+  // set stop button event
   stopButton.on('pointerdown', () => {
     // stop at assigned reelIndex
     const spinResult = BE.GetSpinResult();
@@ -479,13 +623,18 @@ type Sprites = PIXI.Sprite[]
     console.log(spinResult);
   });
 
+
+
+  // ticker function
   app.ticker.add((time: PIXI.Ticker) => {
 
-    for (let i = 0; i < reelStates.length; i++) {
-      const reelState = reelStates[i];
-      run(reelState, time.deltaTime);
+    // if canAddRealAndRow is true, the loop i should < reelStates.length-1
+    if (canAddReelAndRow) {      
+      for (let i = 0; i < reelStatesAdded.length; i++) {
+        const reelState = reelStatesAdded[i];        
+        run(reelState, time.deltaTime);
+      }
     }
-
 
   });
 
@@ -505,9 +654,6 @@ type Sprites = PIXI.Sprite[]
   //   });
   // });
   // createAmountText(totalAmount);
-
-
-
 
 
 

@@ -10,7 +10,7 @@ temp()
 
 
 const ROW_NUM = 4;
-const REEL_NUM = 6;
+const REEL_NUM = 5;
 const SYMBOLS = [0, 1, 2, 3, 4, 5]
 
 const PAY_TABLE =
