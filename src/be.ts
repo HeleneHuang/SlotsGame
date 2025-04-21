@@ -141,11 +141,11 @@ export function GetSpinResult(): SpinRes {
 
 
 function winResults(reelStops: number[][]): Win[] {
-    let wins: Win[] = []
+    const wins: Win[] = []
     // every symbol type 
     for (let symbolId = 0; symbolId < SYMBOLS.length; symbolId++) {
         let symbolNum = 0;
-        let win = new Win(symbolId, [], 0)
+        const win = new Win(symbolId, [], 0)
 
         // every reel
         for (let reelId = 0; reelId < REEL_NUM; reelId++) {
